@@ -16,7 +16,7 @@ class Server
 public:
 	/// Constructor opens the acceptor and starts waiting for the first incoming connection
 	Server(boost::asio::io_context &io_context, unsigned short port)
-			: acceptor_(io_context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
+			: m_acceptor(io_context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 	{
 		// Create the data to be sent to each client.
 		stock s;
@@ -30,7 +30,7 @@ public:
 		s.buy_quantity = 1000;
 		s.sell_price = 4.99;
 		s.sell_quantity = 2000;
-		stocks_.push_back(s);
+		m_stocks.push_back(s);
 		s.code = "DEF";
 		s.name = "Developer Entertainment Firm";
 		s.open_price = 20.24;
@@ -41,11 +41,11 @@ public:
 		s.buy_quantity = 34000;
 		s.sell_price = 19.85;
 		s.sell_quantity = 45000;
-		stocks_.push_back(s);
+		m_stocks.push_back(s);
 
 		// Start an accept operation for a new Connection.
-		connection_ptr new_conn(new Connection(acceptor_.get_io_context()));
-		acceptor_.async_accept(new_conn->socket(), boost::bind(&Server::handle_accept, this,
+		connection_ptr new_conn(new Connection(m_acceptor.get_io_context()));
+		m_acceptor.async_accept(new_conn->socket(), boost::bind(&Server::handle_accept, this,
 															   boost::asio::placeholders::error, new_conn));
 	}
 
@@ -57,13 +57,13 @@ public:
 			// Successfully accepted a new Connection. Send the list of stocks to the
 			// client. The Connection::async_write() function will automatically
 			// serialize the data structure for us.
-			conn->async_write(stocks_,
+			conn->async_write(m_stocks,
 							  boost::bind(&Server::handle_write, this, boost::asio::placeholders::error, conn));
 		}
 
 		// Start an accept operation for a new Connection.
-		connection_ptr new_conn(new Connection(acceptor_.get_io_context()));
-		acceptor_.async_accept(new_conn->socket(),
+		connection_ptr new_conn(new Connection(m_acceptor.get_io_context()));
+		m_acceptor.async_accept(new_conn->socket(),
 							   boost::bind(&Server::handle_accept, this, boost::asio::placeholders::error, new_conn));
 	}
 
@@ -74,12 +74,40 @@ public:
 		// reference to the Connection object goes away.
 	}
 
+	/// Handle completion of a read operation.
+	void handle_read(const boost::system::error_code &e)
+	{
+		if (!e)
+		{
+			// Print out the data that was received.
+			for (std::size_t i = 0; i < m_stocks.size(); ++i)
+			{
+				std::cout << "Stock number " << i << "\n";
+				std::cout << "  code: " << m_stocks[i].code << "\n";
+				std::cout << "  name: " << m_stocks[i].name << "\n";
+				std::cout << "  open_price: " << m_stocks[i].open_price << "\n";
+				std::cout << "  high_price: " << m_stocks[i].high_price << "\n";
+				std::cout << "  low_price: " << m_stocks[i].low_price << "\n";
+				std::cout << "  last_price: " << m_stocks[i].last_price << "\n";
+				std::cout << "  buy_price: " << m_stocks[i].buy_price << "\n";
+				std::cout << "  buy_quantity: " << m_stocks[i].buy_quantity << "\n";
+				std::cout << "  sell_price: " << m_stocks[i].sell_price << "\n";
+				std::cout << "  sell_quantity: " << m_stocks[i].sell_quantity << "\n";
+			}
+		}
+		else
+		{
+			// An error occurred.
+			std::cerr << e.message() << std::endl;
+		}
+	}
+
 private:
 	/// The acceptor object used to accept incoming socket connections
-	boost::asio::ip::tcp::acceptor acceptor_;
+	boost::asio::ip::tcp::acceptor m_acceptor;
 
-	/// The data to be sent to each client
-	std::vector<stock> stocks_;
+	/// The data to be received from clients
+	std::vector<stock> m_stocks;
 };
 
 int main(int argc, char *argv[])
