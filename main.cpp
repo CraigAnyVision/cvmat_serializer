@@ -36,7 +36,7 @@ int main()
 		ia >> task_out;
 	}
 
-	std::cout << task_out.print() << '\n';
+	std::cout << task_out.to_string() << '\n';
 
 	cv::imshow("task_out", task_out.m_frame);
 	cv::waitKey();

@@ -19,7 +19,7 @@ public:
 			  m_name(std::move(name))
 	{}
 
-	std::string print()
+	std::string to_string() const
 	{
 		std::string ret = m_name + ", " + std::to_string(m_frame_id);
 
@@ -31,7 +31,7 @@ public:
 		return ret;
 	}
 
-	static const size_t num_features = 256;
+	static constexpr size_t num_features = 256;
 	size_t m_frame_id;
 	cv::Mat m_frame;
 	std::vector<float> m_features;
@@ -45,7 +45,7 @@ private:
 	{
 		// List all the fields to be serialized/deserialized
 		ar & m_frame_id;
-		ar & m_frame;
+		ar & m_frame; // TODO: jpg encode for compression
 		ar & m_features;
 		ar & m_name;
 	}
