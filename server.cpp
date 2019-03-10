@@ -5,17 +5,17 @@
 #include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include "connection.hpp" // Must come before boost/serialization headers
+#include "Connection.hpp" // Must come before boost/serialization headers
 #include <boost/serialization/vector.hpp>
 
 #include "stock.hpp"
 
 /// Serves stock quote information to any client that connects to it
-class server
+class Server
 {
 public:
 	/// Constructor opens the acceptor and starts waiting for the first incoming connection
-	server(boost::asio::io_context &io_context, unsigned short port)
+	Server(boost::asio::io_context &io_context, unsigned short port)
 			: acceptor_(io_context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 	{
 		// Create the data to be sent to each client.
@@ -43,9 +43,9 @@ public:
 		s.sell_quantity = 45000;
 		stocks_.push_back(s);
 
-		// Start an accept operation for a new connection.
-		connection_ptr new_conn(new connection(acceptor_.get_io_context()));
-		acceptor_.async_accept(new_conn->socket(), boost::bind(&server::handle_accept, this,
+		// Start an accept operation for a new Connection.
+		connection_ptr new_conn(new Connection(acceptor_.get_io_context()));
+		acceptor_.async_accept(new_conn->socket(), boost::bind(&Server::handle_accept, this,
 															   boost::asio::placeholders::error, new_conn));
 	}
 
@@ -54,24 +54,24 @@ public:
 	{
 		if (!e)
 		{
-			// Successfully accepted a new connection. Send the list of stocks to the
-			// client. The connection::async_write() function will automatically
+			// Successfully accepted a new Connection. Send the list of stocks to the
+			// client. The Connection::async_write() function will automatically
 			// serialize the data structure for us.
 			conn->async_write(stocks_,
-							  boost::bind(&server::handle_write, this, boost::asio::placeholders::error, conn));
+							  boost::bind(&Server::handle_write, this, boost::asio::placeholders::error, conn));
 		}
 
-		// Start an accept operation for a new connection.
-		connection_ptr new_conn(new connection(acceptor_.get_io_context()));
+		// Start an accept operation for a new Connection.
+		connection_ptr new_conn(new Connection(acceptor_.get_io_context()));
 		acceptor_.async_accept(new_conn->socket(),
-							   boost::bind(&server::handle_accept, this, boost::asio::placeholders::error, new_conn));
+							   boost::bind(&Server::handle_accept, this, boost::asio::placeholders::error, new_conn));
 	}
 
 	/// Handle completion of a write operation.
 	void handle_write(const boost::system::error_code &e, const connection_ptr &conn)
 	{
 		// Nothing to do. The socket will be closed automatically when the last
-		// reference to the connection object goes away.
+		// reference to the Connection object goes away.
 	}
 
 private:
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 		auto port = boost::lexical_cast<unsigned short>(argv[1]);
 
 		boost::asio::io_context io_context;
-		server server(io_context, port);
+		Server server(io_context, port);
 		io_context.run();
 	}
 	catch (std::exception &e)

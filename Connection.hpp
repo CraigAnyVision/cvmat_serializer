@@ -6,30 +6,28 @@
 #include <vector>
 
 #include <boost/asio.hpp>
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 
-/// The connection class provides serialization primitives on top of a socket.
+/// The Connection class provides serialization primitives on top of a socket
 /**
  * Each message sent using this class consists of:
  * @li An 8-byte header containing the length of the serialized data in
  * hexadecimal.
  * @li The serialized data.
  */
-class connection
+class Connection
 {
 public:
-	/// Constructor.
-	connection(boost::asio::io_context &io_context)
+	Connection(boost::asio::io_context &io_context)
 			: socket_(io_context)
 	{
 	}
 
-	/// Get the underlying socket. Used for making a connection or for accepting
-	/// an incoming connection.
+	/// Get the underlying socket. Used for making a connection or for accepting an incoming connection.
 	boost::asio::ip::tcp::socket &socket()
 	{
 		return socket_;
@@ -41,7 +39,7 @@ public:
 	{
 		// Serialize the data first so we know how large it is.
 		std::ostringstream archive_stream;
-		boost::archive::text_oarchive archive(archive_stream);
+		boost::archive::binary_oarchive archive(archive_stream);
 		archive << t;
 		outbound_data_ = archive_stream.str();
 
@@ -71,10 +69,10 @@ public:
 	void async_read(T &t, Handler handler)
 	{
 		// Issue a read operation to read exactly the number of bytes in a header.
-		void (connection::*f)(
+		void (Connection::*f)(
 				const boost::system::error_code &,
 				T &, boost::tuple<Handler>)
-		= &connection::handle_read_header<T, Handler>;
+		= &Connection::handle_read_header<T, Handler>;
 		boost::asio::async_read(socket_, boost::asio::buffer(inbound_header_),
 								boost::bind(f,
 											this, boost::asio::placeholders::error, boost::ref(t),
@@ -107,10 +105,10 @@ public:
 
 			// Start an asynchronous call to receive the data.
 			inbound_data_.resize(inbound_data_size);
-			void (connection::*f)(
+			void (Connection::*f)(
 					const boost::system::error_code &,
 					T &, boost::tuple<Handler>)
-			= &connection::handle_read_data<T, Handler>;
+			= &Connection::handle_read_data<T, Handler>;
 			boost::asio::async_read(socket_, boost::asio::buffer(inbound_data_),
 									boost::bind(f, this,
 												boost::asio::placeholders::error, boost::ref(t), handler));
@@ -133,7 +131,7 @@ public:
 			{
 				std::string archive_data(&inbound_data_[0], inbound_data_.size());
 				std::istringstream archive_stream(archive_data);
-				boost::archive::text_iarchive archive(archive_stream);
+				boost::archive::binary_iarchive archive(archive_stream);
 				archive >> t;
 			}
 			catch (std::exception &e)
@@ -172,4 +170,4 @@ private:
 	std::vector<char> inbound_data_;
 };
 
-typedef boost::shared_ptr<connection> connection_ptr;
+typedef boost::shared_ptr<Connection> connection_ptr;

@@ -4,16 +4,16 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 
-#include "connection.hpp" // Must come before boost/serialization headers
+#include "Connection.hpp" // Must come before boost/serialization headers
 #include <boost/serialization/vector.hpp>
 
 #include "stock.hpp"
 
-class client
+class Client
 {
 public:
 	/// Constructor starts the asynchronous connect operation.
-	client(boost::asio::io_context &io_context, const std::string &host, const std::string &service)
+	Client(boost::asio::io_context &io_context, const std::string &host, const std::string &service)
 			: connection_(io_context)
 	{
 		// Resolve the host name into an IP address.
@@ -23,7 +23,7 @@ public:
 
 		// Start an asynchronous connect operation.
 		boost::asio::async_connect(connection_.socket(), endpoint_iterator,
-								   boost::bind(&client::handle_connect, this, boost::asio::placeholders::error));
+								   boost::bind(&Client::handle_connect, this, boost::asio::placeholders::error));
 	}
 
 	/// Handle completion of a connect operation.
@@ -31,10 +31,10 @@ public:
 	{
 		if (!e)
 		{
-			// Successfully established connection. Start operation to read the list
-			// of stocks. The connection::async_read() function will automatically
+			// Successfully established Connection. Start operation to read the list
+			// of stocks. The Connection::async_read() function will automatically
 			// decode the data that is read from the underlying socket.
-			connection_.async_read(stocks_, boost::bind(&client::handle_read, this, boost::asio::placeholders::error));
+			connection_.async_read(stocks_, boost::bind(&Client::handle_read, this, boost::asio::placeholders::error));
 		}
 		else
 		{
@@ -78,7 +78,7 @@ public:
 
 private:
 	/// The connection to the server
-	connection connection_;
+	Connection connection_;
 
 	/// The data received from the server
 	std::vector<stock> stocks_;
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 		}
 
 		boost::asio::io_context io_context;
-		client client(io_context, argv[1], argv[2]);
+		Client client(io_context, argv[1], argv[2]);
 		io_context.run();
 	}
 	catch (std::exception &e)
