@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
 
 #include "Connection.hpp" // Must come before boost/serialization headers
 #include <boost/serialization/vector.hpp>
@@ -11,42 +12,17 @@
 #include "stock.hpp"
 
 /// Serves stock quote information to any client that connects to it
-class Server
+class Server : public boost::enable_shared_from_this<Server>
 {
 public:
 	/// Constructor opens the acceptor and starts waiting for the first incoming connection
 	Server(boost::asio::io_context &io_context, unsigned short port)
 			: m_acceptor(io_context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 	{
-		// Create the data to be sent to each client.
-		stock s;
-		s.code = "ABC";
-		s.name = "A Big Company";
-		s.open_price = 4.56;
-		s.high_price = 5.12;
-		s.low_price = 4.33;
-		s.last_price = 4.98;
-		s.buy_price = 4.96;
-		s.buy_quantity = 1000;
-		s.sell_price = 4.99;
-		s.sell_quantity = 2000;
-		m_stocks.push_back(s);
-		s.code = "DEF";
-		s.name = "Developer Entertainment Firm";
-		s.open_price = 20.24;
-		s.high_price = 22.88;
-		s.low_price = 19.50;
-		s.last_price = 19.76;
-		s.buy_price = 19.72;
-		s.buy_quantity = 34000;
-		s.sell_price = 19.85;
-		s.sell_quantity = 45000;
-		m_stocks.push_back(s);
-
 		// Start an accept operation for a new Connection.
 		connection_ptr new_conn(new Connection(m_acceptor.get_io_context()));
 		m_acceptor.async_accept(new_conn->socket(), boost::bind(&Server::handle_accept, this,
-															   boost::asio::placeholders::error, new_conn));
+																boost::asio::placeholders::error, new_conn));
 	}
 
 	/// Handle completion of a accept operation.
@@ -54,29 +30,23 @@ public:
 	{
 		if (!e)
 		{
-			// Successfully accepted a new Connection. Send the list of stocks to the
-			// client. The Connection::async_write() function will automatically
-			// serialize the data structure for us.
-			conn->async_write(m_stocks,
-							  boost::bind(&Server::handle_write, this, boost::asio::placeholders::error, conn));
+			// Successfully accepted a new Connection. Receive the list of stocks from the client. The
+			// Connection::async_write() function will automatically deserialize the data structure for us
+			conn->async_read(m_stocks,
+							 boost::bind(&Server::handle_read, shared_from_this(), boost::asio::placeholders::error));
 		}
 
 		// Start an accept operation for a new Connection.
 		connection_ptr new_conn(new Connection(m_acceptor.get_io_context()));
 		m_acceptor.async_accept(new_conn->socket(),
-							   boost::bind(&Server::handle_accept, this, boost::asio::placeholders::error, new_conn));
-	}
-
-	/// Handle completion of a write operation.
-	void handle_write(const boost::system::error_code &e, const connection_ptr &conn)
-	{
-		// Nothing to do. The socket will be closed automatically when the last
-		// reference to the Connection object goes away.
+								boost::bind(&Server::handle_accept, shared_from_this(),
+											boost::asio::placeholders::error, new_conn));
 	}
 
 	/// Handle completion of a read operation.
 	void handle_read(const boost::system::error_code &e)
 	{
+		std::cerr << "Server: Reading data\n";
 		if (!e)
 		{
 			// Print out the data that was received.
@@ -98,7 +68,7 @@ public:
 		else
 		{
 			// An error occurred.
-			std::cerr << e.message() << std::endl;
+			std::cerr << "Server error: " << e.message() << std::endl;
 		}
 	}
 
@@ -123,11 +93,11 @@ int main(int argc, char *argv[])
 		auto port = boost::lexical_cast<unsigned short>(argv[1]);
 
 		boost::asio::io_context io_context;
-		Server server(io_context, port);
+		boost::shared_ptr<Server> server(new Server(io_context, port));
 		io_context.run();
 	}
 	catch (std::exception &e)
 	{
-		std::cerr << e.what() << '\n';
+		std::cerr << "Server error: " << e.what() << '\n';
 	}
 }

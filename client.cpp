@@ -24,6 +24,32 @@ public:
 		// Start an asynchronous connect operation.
 		boost::asio::async_connect(m_connection->socket(), endpoint_iterator,
 								   boost::bind(&Client::handle_connect, this, boost::asio::placeholders::error));
+
+		// Create the data to be sent to the server
+		stock s;
+		s.code = "ABC";
+		s.name = "A Big Company";
+		s.open_price = 4.56;
+		s.high_price = 5.12;
+		s.low_price = 4.33;
+		s.last_price = 4.98;
+		s.buy_price = 4.96;
+		s.buy_quantity = 1000;
+		s.sell_price = 4.99;
+		s.sell_quantity = 2000;
+		m_stocks.push_back(s);
+		s.code = "DEF";
+		s.name = "Developer Entertainment Firm";
+		s.open_price = 20.24;
+		s.high_price = 22.88;
+		s.low_price = 19.50;
+		s.last_price = 19.76;
+		s.buy_price = 19.72;
+		s.buy_quantity = 34000;
+		s.sell_price = 19.85;
+		s.sell_quantity = 45000;
+		m_stocks.push_back(s);
+
 	}
 
 	/// Handle completion of a connect operation.
@@ -31,10 +57,12 @@ public:
 	{
 		if (!e)
 		{
-			// Successfully established Connection. Start operation to read the list
-			// of stocks. The Connection::async_read() function will automatically
-			// decode the data that is read from the underlying socket.
-			m_connection->async_read(m_stocks, boost::bind(&Client::handle_read, this, boost::asio::placeholders::error));
+			// Successfully established Connection. Start operation to write the list of stocks. The
+			// Connection::async_write() function will automatically serialize the data that is written to the
+			// underlying socket
+			m_connection->async_write(m_stocks,
+									  boost::bind(&Client::handle_write, this, boost::asio::placeholders::error,
+												  m_connection));
 		}
 		else
 		{
@@ -49,38 +77,8 @@ public:
 	void handle_write(const boost::system::error_code &e, const connection_ptr &conn)
 	{
 		// Nothing to do. The socket will be closed automatically when the last
-		// reference to the Connection object goes away.
-	}
-
-	/// Handle completion of a read operation.
-	void handle_read(const boost::system::error_code &e)
-	{
-		if (!e)
-		{
-			// Print out the data that was received.
-			for (std::size_t i = 0; i < m_stocks.size(); ++i)
-			{
-				std::cout << "Stock number " << i << "\n";
-				std::cout << "  code: " << m_stocks[i].code << "\n";
-				std::cout << "  name: " << m_stocks[i].name << "\n";
-				std::cout << "  open_price: " << m_stocks[i].open_price << "\n";
-				std::cout << "  high_price: " << m_stocks[i].high_price << "\n";
-				std::cout << "  low_price: " << m_stocks[i].low_price << "\n";
-				std::cout << "  last_price: " << m_stocks[i].last_price << "\n";
-				std::cout << "  buy_price: " << m_stocks[i].buy_price << "\n";
-				std::cout << "  buy_quantity: " << m_stocks[i].buy_quantity << "\n";
-				std::cout << "  sell_price: " << m_stocks[i].sell_price << "\n";
-				std::cout << "  sell_quantity: " << m_stocks[i].sell_quantity << "\n";
-			}
-		}
-		else
-		{
-			// An error occurred.
-			std::cerr << e.message() << std::endl;
-		}
-
-		// Since we are not starting a new operation the io_context will run out of
-		// work to do and the client will exit.
+		// reference to the Connection object goes away
+		std::cerr << "Client: Data written\n";
 	}
 
 private:

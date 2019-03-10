@@ -10,6 +10,7 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/smart_ptr/enable_shared_from_this.hpp>
 #include <boost/tuple/tuple.hpp>
 
 /// The Connection class provides serialization primitives on top of a socket
@@ -19,7 +20,7 @@
  * hexadecimal.
  * @li The serialized data.
  */
-class Connection
+class Connection : public boost::enable_shared_from_this<Connection>
 {
 public:
 	Connection(boost::asio::io_context &io_context)
@@ -75,7 +76,7 @@ public:
 		= &Connection::handle_read_header<T, Handler>;
 		boost::asio::async_read(socket_, boost::asio::buffer(inbound_header_),
 								boost::bind(f,
-											this, boost::asio::placeholders::error, boost::ref(t),
+											shared_from_this(), boost::asio::placeholders::error, boost::ref(t),
 											boost::make_tuple(handler)));
 	}
 
@@ -110,7 +111,7 @@ public:
 					T &, boost::tuple<Handler>)
 			= &Connection::handle_read_data<T, Handler>;
 			boost::asio::async_read(socket_, boost::asio::buffer(inbound_data_),
-									boost::bind(f, this,
+									boost::bind(f, shared_from_this(),
 												boost::asio::placeholders::error, boost::ref(t), handler));
 		}
 	}
