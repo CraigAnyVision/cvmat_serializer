@@ -1,61 +1,105 @@
-#include <arpa/inet.h>
-#include <cstdio>
-#include <string>
-#include <unistd.h>
+#include <iostream>
+#include <vector>
 
-int main(int argc, char const *argv[])
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
+
+#include "connection.hpp" // Must come before boost/serialization headers
+#include <boost/serialization/vector.hpp>
+
+#include "stock.hpp"
+
+/// Serves stock quote information to any client that connects to it
+class server
 {
-	uint16_t server_port = 1234;
-
-	struct sockaddr_in address{};
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(server_port);
-
-	// Creating socket file descriptor
-	int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock_fd <= 0)
+public:
+	/// Constructor opens the acceptor and starts waiting for the first incoming connection
+	server(boost::asio::io_context &io_context, unsigned short port)
+			: acceptor_(io_context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port))
 	{
-		perror("socket failed");
-		exit(EXIT_FAILURE);
+		// Create the data to be sent to each client.
+		stock s;
+		s.code = "ABC";
+		s.name = "A Big Company";
+		s.open_price = 4.56;
+		s.high_price = 5.12;
+		s.low_price = 4.33;
+		s.last_price = 4.98;
+		s.buy_price = 4.96;
+		s.buy_quantity = 1000;
+		s.sell_price = 4.99;
+		s.sell_quantity = 2000;
+		stocks_.push_back(s);
+		s.code = "DEF";
+		s.name = "Developer Entertainment Firm";
+		s.open_price = 20.24;
+		s.high_price = 22.88;
+		s.low_price = 19.50;
+		s.last_price = 19.76;
+		s.buy_price = 19.72;
+		s.buy_quantity = 34000;
+		s.sell_price = 19.85;
+		s.sell_quantity = 45000;
+		stocks_.push_back(s);
+
+		// Start an accept operation for a new connection.
+		connection_ptr new_conn(new connection(acceptor_.get_io_context()));
+		acceptor_.async_accept(new_conn->socket(), boost::bind(&server::handle_accept, this,
+															   boost::asio::placeholders::error, new_conn));
 	}
 
-	// Forcefully attaching socket to the port
-	int opt = 1;
-	if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+	/// Handle completion of a accept operation.
+	void handle_accept(const boost::system::error_code &e, connection_ptr conn)
 	{
-		perror("setsockopt");
-		exit(EXIT_FAILURE);
-	}
-
-	if (bind(sock_fd, (struct sockaddr *) &address, sizeof(address)) < 0)
-	{
-		perror("bind failed");
-		exit(EXIT_FAILURE);
-	}
-
-	int queue_limit = 3;
-	if (listen(sock_fd, queue_limit) < 0)
-	{
-		perror("listen");
-		exit(EXIT_FAILURE);
-	}
-
-	while (true)
-	{
-		int addr_len = sizeof(address);
-		int new_socket = accept(sock_fd, (struct sockaddr *) &address, (socklen_t *) &addr_len);
-		if (new_socket < 0)
+		if (!e)
 		{
-			perror("accept");
-			exit(EXIT_FAILURE);
+			// Successfully accepted a new connection. Send the list of stocks to the
+			// client. The connection::async_write() function will automatically
+			// serialize the data structure for us.
+			conn->async_write(stocks_,
+							  boost::bind(&server::handle_write, this, boost::asio::placeholders::error, conn));
 		}
 
-		char buffer[1024] = {0};
-		read(new_socket, buffer, 1024);
-		printf("%s\n", buffer);
-		std::string message{"Hello from server"};
-		send(new_socket, message.c_str(), message.length(), 0);
-		printf("Hello message sent\n");
+		// Start an accept operation for a new connection.
+		connection_ptr new_conn(new connection(acceptor_.get_io_context()));
+		acceptor_.async_accept(new_conn->socket(),
+							   boost::bind(&server::handle_accept, this, boost::asio::placeholders::error, new_conn));
+	}
+
+	/// Handle completion of a write operation.
+	void handle_write(const boost::system::error_code &e, const connection_ptr &conn)
+	{
+		// Nothing to do. The socket will be closed automatically when the last
+		// reference to the connection object goes away.
+	}
+
+private:
+	/// The acceptor object used to accept incoming socket connections
+	boost::asio::ip::tcp::acceptor acceptor_;
+
+	/// The data to be sent to each client
+	std::vector<stock> stocks_;
+};
+
+int main(int argc, char *argv[])
+{
+	try
+	{
+		if (argc != 2)
+		{
+			std::cerr << "Usage: server <port>\n";
+			return 1;
+		}
+
+		auto port = boost::lexical_cast<unsigned short>(argv[1]);
+
+		boost::asio::io_context io_context;
+		server server(io_context, port);
+		io_context.run();
+	}
+	catch (std::exception &e)
+	{
+		std::cerr << e.what() << '\n';
 	}
 }

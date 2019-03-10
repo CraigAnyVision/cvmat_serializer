@@ -1,43 +1,105 @@
-#include <arpa/inet.h>
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <unistd.h>
+#include <iostream>
+#include <vector>
 
-int main(int argc, char const *argv[])
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+
+#include "connection.hpp" // Must come before boost/serialization headers
+#include <boost/serialization/vector.hpp>
+
+#include "stock.hpp"
+
+class client
 {
-	int sock_fd = 0;
-	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+public:
+	/// Constructor starts the asynchronous connect operation.
+	client(boost::asio::io_context &io_context, const std::string &host, const std::string &service)
+			: connection_(io_context)
 	{
-		printf("\n Socket creation error \n");
-		exit(EXIT_FAILURE);
+		// Resolve the host name into an IP address.
+		boost::asio::ip::tcp::resolver resolver(io_context);
+		boost::asio::ip::tcp::resolver::query query(host, service);
+		boost::asio::ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
+
+		// Start an asynchronous connect operation.
+		boost::asio::async_connect(connection_.socket(), endpoint_iterator,
+								   boost::bind(&client::handle_connect, this, boost::asio::placeholders::error));
 	}
 
-	struct sockaddr_in serv_addr{};
-	memset(&serv_addr, 0, sizeof(serv_addr));
-
-	std::string server_ip{"127.0.0.1"};
-	uint16_t server_port = 1234;
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(server_port);
-
-	// Convert IPv4 and IPv6 addresses from text to binary form
-	if (inet_pton(AF_INET, server_ip.c_str(), &serv_addr.sin_addr) <= 0)
+	/// Handle completion of a connect operation.
+	void handle_connect(const boost::system::error_code &e)
 	{
-		printf("\nInvalid address / address not supported\n");
-		exit(EXIT_FAILURE);
+		if (!e)
+		{
+			// Successfully established connection. Start operation to read the list
+			// of stocks. The connection::async_read() function will automatically
+			// decode the data that is read from the underlying socket.
+			connection_.async_read(stocks_, boost::bind(&client::handle_read, this, boost::asio::placeholders::error));
+		}
+		else
+		{
+			// An error occurred. Log it and return. Since we are not starting a new
+			// operation the io_context will run out of work to do and the client will
+			// exit.
+			std::cerr << e.message() << std::endl;
+		}
 	}
 
-	if (connect(sock_fd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	/// Handle completion of a read operation.
+	void handle_read(const boost::system::error_code &e)
 	{
-		printf("\nConnection Failed \n");
-		exit(EXIT_FAILURE);
+		if (!e)
+		{
+			// Print out the data that was received.
+			for (std::size_t i = 0; i < stocks_.size(); ++i)
+			{
+				std::cout << "Stock number " << i << "\n";
+				std::cout << "  code: " << stocks_[i].code << "\n";
+				std::cout << "  name: " << stocks_[i].name << "\n";
+				std::cout << "  open_price: " << stocks_[i].open_price << "\n";
+				std::cout << "  high_price: " << stocks_[i].high_price << "\n";
+				std::cout << "  low_price: " << stocks_[i].low_price << "\n";
+				std::cout << "  last_price: " << stocks_[i].last_price << "\n";
+				std::cout << "  buy_price: " << stocks_[i].buy_price << "\n";
+				std::cout << "  buy_quantity: " << stocks_[i].buy_quantity << "\n";
+				std::cout << "  sell_price: " << stocks_[i].sell_price << "\n";
+				std::cout << "  sell_quantity: " << stocks_[i].sell_quantity << "\n";
+			}
+		}
+		else
+		{
+			// An error occurred.
+			std::cerr << e.message() << std::endl;
+		}
+
+		// Since we are not starting a new operation the io_context will run out of
+		// work to do and the client will exit.
 	}
 
-	std::string message{"Hello from client"};
-	send(sock_fd, message.c_str(), message.length(), 0);
-	printf("Hello message sent\n");
-	char buffer[1024] = {0};
-	read(sock_fd, buffer, 1024);
-	printf("%s\n", buffer);
+private:
+	/// The connection to the server
+	connection connection_;
+
+	/// The data received from the server
+	std::vector<stock> stocks_;
+};
+
+int main(int argc, char *argv[])
+{
+	try
+	{
+		if (argc != 3)
+		{
+			std::cerr << "Usage: client <host> <port>" << std::endl;
+			return 1;
+		}
+
+		boost::asio::io_context io_context;
+		client client(io_context, argv[1], argv[2]);
+		io_context.run();
+	}
+	catch (std::exception &e)
+	{
+		std::cerr << e.what() << '\n';
+	}
 }
