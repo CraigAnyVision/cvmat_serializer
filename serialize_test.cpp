@@ -28,6 +28,13 @@ int main()
 		oa << task_in;
 	}
 
+	// Without jpeg compression: 733966
+	// With jpeg compression:    207318
+	std::cout << oss.str().size() << '\n';
+
+	// Clear the Mat (to prove deserialization works as expected)
+	task_in.m_frame = cv::Scalar(0,0,0);
+
 	// Deserialize
 	Task task_out;
 	{

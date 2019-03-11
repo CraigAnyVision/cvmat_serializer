@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <boost/serialization/access.hpp>
+#include <boost/serialization/split_member.hpp>
 #include <boost/serialization/vector.hpp>
 
 #include <opencv2/opencv.hpp>
@@ -31,9 +32,21 @@ public:
 		return ret;
 	}
 
+	void jpeg_encode() const
+	{
+		std::vector<int> param{cv::IMWRITE_JPEG_QUALITY, 100};
+		cv::imencode(".jpg", m_frame, m_jpeg, param);
+	}
+
+	void jpeg_decode()
+	{
+		cv::imdecode(m_jpeg, CV_LOAD_IMAGE_COLOR, &m_frame);
+	}
+
 	static constexpr size_t num_features = 256;
 	size_t m_frame_id;
 	cv::Mat m_frame;
+	mutable std::vector<uchar> m_jpeg;
 	std::vector<float> m_features;
 	std::string m_name;
 
@@ -41,12 +54,31 @@ private:
 	friend class boost::serialization::access;
 
 	template<class Archive>
-	void serialize(Archive &ar, const unsigned int version)
+	void save(Archive &ar, const unsigned int version) const
 	{
-		// List all the fields to be serialized/deserialized
+		// compress the cv::Mat
+		this->jpeg_encode();
+
+		// List all the fields to be serialized
 		ar & m_frame_id;
-		ar & m_frame; // TODO: jpg encode for compression
+		ar & m_jpeg;
 		ar & m_features;
 		ar & m_name;
 	}
+
+	template<class Archive>
+	void load(Archive &ar, const unsigned int version)
+	{
+		// List all the fields to be deserialized
+		ar & m_frame_id;
+		ar & m_jpeg;
+		ar & m_features;
+		ar & m_name;
+
+		// decompress the jpeg
+		this->jpeg_decode();
+	}
+	BOOST_SERIALIZATION_SPLIT_MEMBER()
 };
+
+BOOST_CLASS_VERSION(Task, 1)
